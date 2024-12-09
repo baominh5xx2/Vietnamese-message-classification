@@ -5,7 +5,76 @@ from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
 import pandas as pd
 import numpy as np
+import re
+import emoji
+import unicodedata
+from underthesea import text_normalize
+def clean_text(text, keep_punct=False):
+    """
+    Clean and normalize Vietnamese text
+    Args:
+        text: Input text string
+        keep_punct: Whether to keep important punctuation (default: False)
+    Returns:
+        Cleaned text string
+    """
+    if not isinstance(text, str):
+        return ''
 
+    # Normalize unicode characters
+    text = unicodedata.normalize('NFKC', text)
+    
+    # Normalize Vietnamese text
+    text = text_normalize(text)
+
+    
+    # Remove URLs
+    text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text)
+    
+    # Remove email addresses
+    text = re.sub(r'[\w\.-]+@[\w\.-]+', '', text)
+    
+    # Remove numbers but keep mixed text-numbers
+    text = re.sub(r'\b\d+\b', '', text)
+    
+    # Handle Vietnamese abbreviations
+    abbr_dict = {
+        'ko': 'không',
+        'kg': 'không',
+        'kh': 'không',
+        'tks': 'cảm ơn',
+        'dc': 'được',
+        'dk': 'được',
+        'đc': 'được',
+        'đk': 'được',
+        'ny': 'người yêu',
+        'vs': 'với',
+        'r': 'rồi',
+        'wan': 'quan',
+        'uk': 'ừ',
+        'ntn': 'như thế nào'
+    }
+    for abbr, full in abbr_dict.items():
+        text = re.sub(r'\b' + abbr + r'\b', full, text, flags=re.IGNORECASE)
+    
+    if keep_punct:
+        # Keep only specific punctuation
+        text = re.sub(r'[^\w\s!?.,]', '', text)
+    else:
+        # Remove all punctuation
+        text = re.sub(r'[^\w\s]', '', text)
+    
+    # Remove extra whitespace
+    text = re.sub(r'\s+', ' ', text)
+    text = text.strip()
+    
+    # Convert to lowercase
+    text = text.lower()
+    
+    # Handle repeated characters (e.g., 'đẹppppp' -> 'đẹp')
+    text = re.sub(r'(.)\1+', r'\1', text)
+    
+    return text
 # Kiểm tra xem GPU có sẵn không
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Đang sử dụng thiết bị: {device}")
@@ -16,7 +85,9 @@ model = BertModel.from_pretrained('bert-base-uncased').to(device)  # Chuyển m�
 
 # Hàm để lấy sentence embedding từ BERT
 def get_bert_embedding(sentence):
-    inputs = tokenizer(sentence, return_tensors='pt', truncation=True, padding=True, max_length=128)
+    
+    cleaned_sentence = clean_text(sentence, keep_punct=True)
+    inputs = tokenizer(cleaned_sentence, return_tensors='pt', truncation=True, padding=True, max_length=128)
     
     # Đưa các tensor vào GPU nếu có
     inputs = {key: value.to(device) for key, value in inputs.items()}
