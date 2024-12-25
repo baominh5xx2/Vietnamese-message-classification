@@ -1,0 +1,1 @@
+joblib.dump(svm_model, 'svm_model.pkl')
